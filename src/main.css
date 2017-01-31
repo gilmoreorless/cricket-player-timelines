@@ -3,6 +3,7 @@ body {
 }
 
 .player-line {
+    fill: none;
     stroke: #333;
     stroke-width: 1.5;
     /*stroke-linecap: round;*/

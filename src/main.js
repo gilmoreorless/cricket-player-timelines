@@ -3,7 +3,7 @@ var chartBits = {};
 
 // Config
 
-var widthPerInnings = 2;
+var widthPerInnings = 10;
 var heightPerPlayer = 5;
 
 
@@ -27,12 +27,13 @@ function parseData(data) {
 
 	// Build a list of blocks of consecutive innings per player, based on total innings index
 	data.players.forEach(player => {
+		player.inningsById = mapByField(player.innings, 'innings_id');
 		player.inningsBlocks = [];
 		let curBlock = {};
 		player.innings.forEach(inn => {
 			let id = inn.innings_id;
 			let index = data.innings.indexOf(id);
-			if (curBlock.end) {
+			if (curBlock.end !== undefined) {
 				// If there's a gap between innings, start a new block
 				if (index > curBlock.end + 1) {
 					player.inningsBlocks.push(curBlock);
@@ -40,11 +41,11 @@ function parseData(data) {
 				}
 			}
 
-			if (!curBlock.start) {
+			if (curBlock.start === undefined) {
 				curBlock.start = index;
-				curBlock.list = [];
+				curBlock.idList = [];
 			}
-			curBlock.list.push(index);
+			curBlock.idList.push(data.innings[index]);
 			curBlock.end = index;
 		});
 		player.inningsBlocks.push(curBlock);
@@ -72,21 +73,38 @@ function setupChart() {
 
 // Rendering
 
-function playerPathGenerator(player) {
-	var path = [];
-	player.inningsBlocks.forEach(block => {
-		let start = block.start * widthPerInnings;
-		let width = block.list.length * widthPerInnings;
-		path.push(`M ${start},0`, `l ${width},0`);
-	});
-	return path.join(' ');
+function playerPathGenerator(options) {
+	var opts = Object.assign({}, options || {});
+	var withPositions = !!opts.withPositions;
+
+	return (player) => {
+		let path = [];
+		player.inningsBlocks.forEach(block => {
+			let start = block.start * widthPerInnings;
+			if (!withPositions) {
+				let width = block.idList.length * widthPerInnings;
+				path.push(`M${start},0`, `l${width},0`);
+				return;
+			}
+
+			block.idList.forEach((innId, index) => {
+				let inn = player.inningsById.get(innId);
+				let pos = inn.batting_position * heightPerPlayer;
+				let x = start + index * widthPerInnings;
+				let command = index === 0 ? 'M' : 'L';
+				path.push(`${command}${x},${pos}`);
+			});
+		});
+		return path.join(' ');
+	}
 }
 
 function renderLines() {
 	// TODO: Switch display modes
+	var withPositions = 1;
 	chartBits.lines
-		.attr('transform', (d, i) => `translate(0, ${i * heightPerPlayer + heightPerPlayer / 2})`)
-		.attr('d', playerPathGenerator)
+		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${i * heightPerPlayer + heightPerPlayer / 2})`)
+		.attr('d', playerPathGenerator({ withPositions }))
 }
 
 d3.json('/cricinfo-scripts/project-players-over-time/data/player-data.json', parseData);
