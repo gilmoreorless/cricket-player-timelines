@@ -2,7 +2,7 @@ Things to do
 ============
 
 * Basic rendering
-	* Faint line to indicate gaps between innings
+	* Show dots when a player only had one inning in a block - e.g. Peter Siddle
 	* Name labels (main axis)
 	* Colours
 	* Year markers (cross axis)
@@ -10,6 +10,7 @@ Things to do
 * Options
 	* Toggle layout modes (row-per-player vs row-per-position)
 	* Toggle horizontal vs vertical
+	* Toggle showing lines between innings gaps
 * Interaction
 	* On line hover
 		* Highlight line, player Name

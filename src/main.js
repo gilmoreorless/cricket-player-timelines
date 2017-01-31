@@ -64,8 +64,12 @@ function setupChart() {
 		.attr('translate', `transform(${widthPerInnings}, 0)`);
 	chartBits.lines = chartBits.main.selectAll('.player-line')
 		.data(allData.players, d => d.info.id)
-		.enter().append('path')
+		.enter().append('g')
 			.attr('class', 'player-line');
+	chartBits.linesGap = chartBits.lines.append('path')
+		.attr('class', 'player-line-gap');
+	chartBits.linesPlaying = chartBits.lines.append('path')
+		.attr('class', 'player-line-playing');
 
 	renderLines();
 }
@@ -73,13 +77,43 @@ function setupChart() {
 
 // Rendering
 
+class CounterMap {
+	constructor() {
+		this.map = new Map();
+	}
+
+	set(k, v) {
+		this.map.set(k, +v);
+		return this;
+	}
+
+	get(k) {
+		return this.map.get(k) || 0;
+	}
+
+	increment(k, amount=1) {
+		let value = this.get(k) + (+amount);
+		return this.set(k, value);
+	}
+}
+
+var gapPlayersPerX = new CounterMap();
+
 function playerPathGenerator(options) {
 	var opts = Object.assign({}, options || {});
 	var withPositions = !!opts.withPositions;
+	var skipGaps = !!opts.skipGaps;
 
 	return (player) => {
+		if (!withPositions && !skipGaps) {
+			let start = player.inningsBlocks[0].start * widthPerInnings;
+			let end = player.inningsBlocks[player.inningsBlocks.length - 1].end * widthPerInnings;
+			return `M${start},0 L${end},0`;
+		}
+
 		let path = [];
-		player.inningsBlocks.forEach(block => {
+		let lastX;
+		player.inningsBlocks.forEach((block, blockIndex) => {
 			let start = block.start * widthPerInnings;
 			if (!withPositions) {
 				let width = block.idList.length * widthPerInnings;
@@ -89,10 +123,25 @@ function playerPathGenerator(options) {
 
 			block.idList.forEach((innId, index) => {
 				let inn = player.inningsById.get(innId);
-				let pos = inn.batting_position * heightPerPlayer;
+				let y = inn.batting_position * heightPerPlayer;
 				let x = start + index * widthPerInnings;
-				let command = index === 0 ? 'M' : 'L';
-				path.push(`${command}${x},${pos}`);
+				// let command = x === start || (index === 0 && skipGaps) ? 'M' : 'L';
+				let command = 'L';
+				if (index === 0) {
+					if (skipGaps || blockIndex === 0) {
+						command = 'M';
+					} else if (!skipGaps) {
+						let gapPlayers = gapPlayersPerX.get(lastX + widthPerInnings);
+						let gapY = heightPerPlayer * (gapPlayers + 14);
+						for (let gx of d3.range(lastX + widthPerInnings, x - widthPerInnings, widthPerInnings)) {
+							gapPlayersPerX.increment(gx);
+						}
+						// Add extra points to move the line outside the playing 11 positions
+						path.push(`L${lastX + widthPerInnings},${gapY},${x - widthPerInnings},${gapY}`);
+					}
+				}
+				path.push(`${command}${x},${y}`);
+				lastX = x;
 			});
 		});
 		return path.join(' ');
@@ -104,7 +153,10 @@ function renderLines() {
 	var withPositions = 1;
 	chartBits.lines
 		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${i * heightPerPlayer + heightPerPlayer / 2})`)
-		.attr('d', playerPathGenerator({ withPositions }))
+	chartBits.linesGap
+		.attr('d', playerPathGenerator({ withPositions, skipGaps: false }))
+	chartBits.linesPlaying
+		.attr('d', playerPathGenerator({ withPositions, skipGaps: true }))
 }
 
 d3.json('/cricinfo-scripts/project-players-over-time/data/player-data.json', parseData);
