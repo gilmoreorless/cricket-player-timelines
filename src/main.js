@@ -18,6 +18,38 @@ function mapByField(arr, field = 'id') {
 	return map;
 }
 
+function flatten(arr) {
+	return (arr || []).reduce((memo, val) => memo.concat(val), []);
+}
+
+function first(arr) {
+	return arr[0];
+}
+
+function last(arr) {
+	return arr[arr.length - 1];
+}
+
+class CounterMap {
+	constructor() {
+		this.map = new Map();
+	}
+
+	set(k, v) {
+		this.map.set(k, +v);
+		return this;
+	}
+
+	get(k) {
+		return this.map.get(k) || 0;
+	}
+
+	increment(k, amount=1) {
+		let value = this.get(k) + (+amount);
+		return this.set(k, value);
+	}
+}
+
 
 // Setup
 
@@ -77,74 +109,84 @@ function setupChart() {
 
 // Rendering
 
-class CounterMap {
-	constructor() {
-		this.map = new Map();
-	}
-
-	set(k, v) {
-		this.map.set(k, +v);
-		return this;
-	}
-
-	get(k) {
-		return this.map.get(k) || 0;
-	}
-
-	increment(k, amount=1) {
-		let value = this.get(k) + (+amount);
-		return this.set(k, value);
-	}
-}
-
 var gapPlayersPerX = new CounterMap();
 
+var pathGenerators = {
+
+	rowPerPlayer(player) {
+		return flatten(player.inningsBlocks.map(block => {
+			const start = block.start * widthPerInnings;
+			const width = block.idList.length * widthPerInnings;
+			return [`M${start},0`, `l${width},0`];
+		}));
+	},
+
+	rowPerPlayerGaps(player) {
+		const start = player.inningsBlocks[0].start * widthPerInnings;
+		const end = player.inningsBlocks[player.inningsBlocks.length - 1].end * widthPerInnings;
+		return [`M${start},0`, `L${end},0`];
+	},
+
+	rowPerPosition(player) {
+		return flatten(player.inningsBlocks.map((block, blockIndex) => {
+			const start = block.start * widthPerInnings;
+			return block.idList.map((innId, index) => {
+				const inn = player.inningsById.get(innId);
+				const y = inn.batting_position * heightPerPlayer;
+				const x = start + index * widthPerInnings;
+				let command = index === 0 ? 'M' : 'L';
+				return `${command}${x},${y}`;
+			});
+		}));
+	},
+
+	rowPerPositionGaps(player) {
+		if (player.inningsBlocks.length < 2) {
+			return [];
+		}
+		const gaps = player.inningsBlocks.slice(0, -1).map((block, index) => {
+			const nextBlock = player.inningsBlocks[index + 1];
+			return {
+				fromIndex: block.end,
+				fromPos: player.inningsById.get(last(block.idList)).batting_position,
+				toIndex: nextBlock.start,
+				toPos: player.inningsById.get(first(nextBlock.idList)).batting_position,
+			};
+		});
+		return flatten(gaps.map(gap => {
+			const startX = gap.fromIndex * widthPerInnings;
+			const startY = gap.fromPos * heightPerPlayer;
+			const endX = gap.toIndex * widthPerInnings;
+			const endY = gap.toPos * heightPerPlayer;
+			const gapPlayers = gapPlayersPerX.get(startX + widthPerInnings);
+			const gapY = heightPerPlayer * (gapPlayers + 14);
+			for (let gx of d3.range(startX + widthPerInnings, endX - widthPerInnings, widthPerInnings)) {
+				gapPlayersPerX.increment(gx);
+			}
+			return [
+				`M${startX},${startY}`,
+				`L${startX + widthPerInnings},${gapY}`,
+				`L${endX - widthPerInnings},${gapY}`,
+				`L${endX},${endY}`
+			]
+		}));
+	}
+
+};
+
 function playerPathGenerator(options) {
-	var opts = Object.assign({}, options || {});
-	var withPositions = !!opts.withPositions;
-	var skipGaps = !!opts.skipGaps;
+	const opts = Object.assign({}, options || {});
+	const withPositions = !!opts.withPositions;
+	const skipGaps = !!opts.skipGaps;
 
 	return (player) => {
-		if (!withPositions && !skipGaps) {
-			let start = player.inningsBlocks[0].start * widthPerInnings;
-			let end = player.inningsBlocks[player.inningsBlocks.length - 1].end * widthPerInnings;
-			return `M${start},0 L${end},0`;
+		let fnName = withPositions ? 'rowPerPosition' : 'rowPerPlayer';
+		if (!skipGaps) {
+			fnName += 'Gaps';
 		}
-
-		let path = [];
-		let lastX;
-		player.inningsBlocks.forEach((block, blockIndex) => {
-			let start = block.start * widthPerInnings;
-			if (!withPositions) {
-				let width = block.idList.length * widthPerInnings;
-				path.push(`M${start},0`, `l${width},0`);
-				return;
-			}
-
-			block.idList.forEach((innId, index) => {
-				let inn = player.inningsById.get(innId);
-				let y = inn.batting_position * heightPerPlayer;
-				let x = start + index * widthPerInnings;
-				// let command = x === start || (index === 0 && skipGaps) ? 'M' : 'L';
-				let command = 'L';
-				if (index === 0) {
-					if (skipGaps || blockIndex === 0) {
-						command = 'M';
-					} else if (!skipGaps) {
-						let gapPlayers = gapPlayersPerX.get(lastX + widthPerInnings);
-						let gapY = heightPerPlayer * (gapPlayers + 14);
-						for (let gx of d3.range(lastX + widthPerInnings, x - widthPerInnings, widthPerInnings)) {
-							gapPlayersPerX.increment(gx);
-						}
-						// Add extra points to move the line outside the playing 11 positions
-						path.push(`L${lastX + widthPerInnings},${gapY},${x - widthPerInnings},${gapY}`);
-					}
-				}
-				path.push(`${command}${x},${y}`);
-				lastX = x;
-			});
-		});
-		return path.join(' ');
+		if (pathGenerators[fnName]) {
+			return pathGenerators[fnName](player).join(' ');
+		}
 	}
 }
 
