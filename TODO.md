@@ -2,11 +2,9 @@ Things to do
 ============
 
 * Basic rendering
-	* Show dots when a player only had one inning in a block - e.g. Peter Siddle
 	* Name labels (main axis)
 	* Colours
 	* Year markers (cross axis)
-	* Highlight captain/wicketkeeper
 * Options
 	* Toggle layout modes (row-per-player vs row-per-position)
 	* Toggle horizontal vs vertical
@@ -20,3 +18,5 @@ Things to do
 * Behind the scenes
 	* Include data source in repo
 	* Transpile ES6
+* Nice to have
+	* New vis: Runs per position (toggle: as total runs or as % of team score)

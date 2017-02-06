@@ -1,10 +1,20 @@
-var allData;
-var chartBits = {};
-
 // Config
 
 var widthPerInnings = 10;
 var heightPerPlayer = 5;
+var colours = {
+	playerDefault: '#333',
+	captain: 'hsl(120, 50%, 50%)',
+	captainKeeper: 'hsl(75, 50%, 50%)',
+	keeper: 'hsl(30, 50%, 50%)',
+};
+
+
+// Data holders
+
+var allData;
+var chartBits = {};
+var totalInningsWidth = 0;
 
 
 // Helpers
@@ -65,6 +75,7 @@ function parseData(data) {
 		player.innings.forEach(inn => {
 			let id = inn.innings_id;
 			let index = data.innings.indexOf(id);
+			inn.total_index = index;
 			if (curBlock.end !== undefined) {
 				// If there's a gap between innings, start a new block
 				if (index > curBlock.end + 1) {
@@ -89,11 +100,14 @@ function parseData(data) {
 }
 
 function setupChart() {
+	totalInningsWidth = widthPerInnings * (allData.innings.length - 1);
+
 	chartBits.root = d3.select('#shiny').append('svg')
-		.attr('width', widthPerInnings * (allData.innings.length + 2))
+		.attr('width', totalInningsWidth + widthPerInnings * 2)
 		.attr('height', heightPerPlayer * allData.players.length);
+	chartBits.defs = chartBits.root.append('defs');
 	chartBits.main = chartBits.root.append('g').attr('class', 'graph-main')
-		.attr('translate', `transform(${widthPerInnings}, 0)`);
+		.attr('transform', `translate(${widthPerInnings}, 0)`);
 	chartBits.lines = chartBits.main.selectAll('.player-line')
 		.data(allData.players, d => d.info.id)
 		.enter().append('g')
@@ -130,13 +144,22 @@ var pathGenerators = {
 	rowPerPosition(player) {
 		return flatten(player.inningsBlocks.map((block, blockIndex) => {
 			const start = block.start * widthPerInnings;
-			return block.idList.map((innId, index) => {
+			const singleInning = (block.start === block.end);
+			return flatten(block.idList.map((innId, index) => {
 				const inn = player.inningsById.get(innId);
 				const y = inn.batting_position * heightPerPlayer;
 				const x = start + index * widthPerInnings;
-				let command = index === 0 ? 'M' : 'L';
-				return `${command}${x},${y}`;
-			});
+				if (singleInning) {
+					return [`M${x - 1},${y - 1}`, `M${x - 1},${y}`, `L${x + 1},${y}`];
+				}
+				const command = index === 0 ? 'M' : 'L';
+				let points = [`${command}${x},${y}`];
+				if (index === 0 && blockIndex === 0) {
+					// Ensure at least 1 pixel of height to allow gradient bounding boxes to work properly
+					points.unshift(`${command}${x},${y - 1}`);
+				}
+				return points;
+			}));
 		}));
 	},
 
@@ -190,6 +213,72 @@ function playerPathGenerator(options) {
 	}
 }
 
+var playerColourCache = new Map();
+
+function playerColourGenerator(player) {
+	let existing = playerColourCache.get(player.info.id);
+	if (existing) {
+		return existing;
+	}
+
+	let stops = [];
+	let lastColour = colours.playerDefault;
+	player.innings.forEach(inn => {
+		let colour = colours.playerDefault;
+		if (inn.captain) {
+			colour = inn.keeper ? colours.captainKeeper : colours.captain;
+		} else if (inn.keeper) {
+			colour = colours.keeper;
+		}
+		if (colour !== lastColour) {
+			stops.push({
+				pos: inn.total_index,
+				col: colour
+			});
+		}
+		lastColour = colour;
+	});
+	if (stops.length === 0) {
+		return colours.playerDefault;
+	}
+
+	// TODO: Don't generate a gradient if colour is 100% of player's innings
+	console.log(player.info, stops);
+	// Don't bother with a gradient if the player only had one inning
+	if (player.innings.length === 1) {
+		return stops[0].col;
+	}
+
+	const gradId = 'grad-player-' + player.info.id;
+	const gradUrl = `url(#${gradId})`;
+	const firstIndex = first(player.innings).total_index;
+	const indexDiff = last(player.innings).total_index - firstIndex;
+
+	let grad = chartBits.defs.append('linearGradient')
+		.attr('id', gradId);
+	const addStop = (pos, col) => {
+		const offset = (pos - firstIndex) / indexDiff * 100;
+		grad.append('stop')
+			.attr('offset', offset + '%')
+			.attr('stop-color', col);
+	};
+
+	let prevStop;
+	stops.forEach(stop => {
+		if (!prevStop && (stop.pos - firstIndex) > 0) {
+			addStop(stop.pos - 1, colours.playerDefault);
+		}
+		if (prevStop) {
+			addStop(stop.pos - 1, prevStop.col);
+		}
+		addStop(stop.pos, stop.col);
+		prevStop = stop;
+	});
+
+	playerColourCache.set(player.info.id, gradUrl);
+	return gradUrl;
+}
+
 function renderLines() {
 	// TODO: Switch display modes
 	var withPositions = 1;
@@ -199,6 +288,7 @@ function renderLines() {
 		.attr('d', playerPathGenerator({ withPositions, skipGaps: false }))
 	chartBits.linesPlaying
 		.attr('d', playerPathGenerator({ withPositions, skipGaps: true }))
+		.attr('stroke', playerColourGenerator)
 }
 
 d3.json('/cricinfo-scripts/project-players-over-time/data/player-data.json', parseData);
