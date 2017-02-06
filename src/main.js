@@ -13,7 +13,9 @@ var colours = {
 // Data holders
 
 var allData;
-var chartBits = {};
+var dom = {};
+var helpers = {};
+var h = helpers; // Shorthand for convenience
 var totalInningsWidth = 0;
 
 
@@ -102,19 +104,27 @@ function parseData(data) {
 function setupChart() {
 	totalInningsWidth = widthPerInnings * (allData.innings.length - 1);
 
-	chartBits.root = d3.select('#shiny').append('svg')
+	helpers.x = d3.scaleLinear()
+		.domain([0, allData.innings.length - 1])
+		.range([0, totalInningsWidth]);
+	helpers.y = d3.scaleLinear()
+		.domain([0, 11])
+		.range([0, heightPerPlayer * 11]);
+
+	dom.root = d3.select('#shiny').append('svg')
 		.attr('width', totalInningsWidth + widthPerInnings * 2)
 		.attr('height', heightPerPlayer * allData.players.length);
-	chartBits.defs = chartBits.root.append('defs');
-	chartBits.main = chartBits.root.append('g').attr('class', 'graph-main')
+	dom.defs = dom.root.append('defs');
+	dom.main = dom.root.append('g')
+		.attr('class', 'graph-main')
 		.attr('transform', `translate(${widthPerInnings}, 0)`);
-	chartBits.lines = chartBits.main.selectAll('.player-line')
+	dom.lines = dom.main.selectAll('.player-line')
 		.data(allData.players, d => d.info.id)
 		.enter().append('g')
 			.attr('class', 'player-line');
-	chartBits.linesGap = chartBits.lines.append('path')
+	dom.linesGap = dom.lines.append('path')
 		.attr('class', 'player-line-gap');
-	chartBits.linesPlaying = chartBits.lines.append('path')
+	dom.linesPlaying = dom.lines.append('path')
 		.attr('class', 'player-line-playing');
 
 	renderLines();
@@ -127,30 +137,37 @@ var gapPlayersPerX = new CounterMap();
 
 var pathGenerators = {
 
+	dot(x, y) {
+		return [`M${x - 1},${y - 1}`, `M${x - 1},${y}`, `L${x + 1},${y}`];
+	},
+
 	rowPerPlayer(player) {
 		return flatten(player.inningsBlocks.map(block => {
-			const start = block.start * widthPerInnings;
-			const width = block.idList.length * widthPerInnings;
-			return [`M${start},0`, `l${width},0`];
+			const singleInning = (block.start === block.end);
+			const start = h.x(block.start);
+			const width = h.x(block.idList.length - 1);
+			if (singleInning) {
+				return pathGenerators.dot(start, 0);
+			}
+			return [`M${start},-1`, `M${start},0`, `l${width},0`];
 		}));
 	},
 
 	rowPerPlayerGaps(player) {
-		const start = player.inningsBlocks[0].start * widthPerInnings;
-		const end = player.inningsBlocks[player.inningsBlocks.length - 1].end * widthPerInnings;
+		const start = h.x(player.inningsBlocks[0].start);
+		const end = h.x(player.inningsBlocks[player.inningsBlocks.length - 1].end);
 		return [`M${start},0`, `L${end},0`];
 	},
 
 	rowPerPosition(player) {
 		return flatten(player.inningsBlocks.map((block, blockIndex) => {
-			const start = block.start * widthPerInnings;
 			const singleInning = (block.start === block.end);
 			return flatten(block.idList.map((innId, index) => {
 				const inn = player.inningsById.get(innId);
-				const y = inn.batting_position * heightPerPlayer;
-				const x = start + index * widthPerInnings;
+				const x = h.x(block.start + index);
+				const y = h.y(inn.batting_position);
 				if (singleInning) {
-					return [`M${x - 1},${y - 1}`, `M${x - 1},${y}`, `L${x + 1},${y}`];
+					return pathGenerators.dot(x, y);
 				}
 				const command = index === 0 ? 'M' : 'L';
 				let points = [`${command}${x},${y}`];
@@ -177,19 +194,19 @@ var pathGenerators = {
 			};
 		});
 		return flatten(gaps.map(gap => {
-			const startX = gap.fromIndex * widthPerInnings;
-			const startY = gap.fromPos * heightPerPlayer;
-			const endX = gap.toIndex * widthPerInnings;
-			const endY = gap.toPos * heightPerPlayer;
-			const gapPlayers = gapPlayersPerX.get(startX + widthPerInnings);
-			const gapY = heightPerPlayer * (gapPlayers + 14);
-			for (let gx of d3.range(startX + widthPerInnings, endX - widthPerInnings, widthPerInnings)) {
+			const startX = h.x(gap.fromIndex);
+			const startY = h.y(gap.fromPos);
+			const endX = h.x(gap.toIndex);
+			const endY = h.y(gap.toPos);
+			const gapPlayers = gapPlayersPerX.get(gap.fromIndex + 1);
+			const gapY = h.y(gapPlayers + 14);
+			for (let gx of d3.range(gap.fromIndex + 1, gap.toIndex - 1)) {
 				gapPlayersPerX.increment(gx);
 			}
 			return [
 				`M${startX},${startY}`,
-				`L${startX + widthPerInnings},${gapY}`,
-				`L${endX - widthPerInnings},${gapY}`,
+				`L${h.x(gap.fromIndex + 1)},${gapY}`,
+				`L${h.x(gap.toIndex - 1)},${gapY}`,
 				`L${endX},${endY}`
 			]
 		}));
@@ -254,7 +271,7 @@ function playerColourGenerator(player) {
 	const firstIndex = first(player.innings).total_index;
 	const indexDiff = last(player.innings).total_index - firstIndex;
 
-	let grad = chartBits.defs.append('linearGradient')
+	let grad = dom.defs.append('linearGradient')
 		.attr('id', gradId);
 	const addStop = (pos, col) => {
 		const offset = (pos - firstIndex) / indexDiff * 100;
@@ -282,11 +299,11 @@ function playerColourGenerator(player) {
 function renderLines() {
 	// TODO: Switch display modes
 	var withPositions = 1;
-	chartBits.lines
-		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${i * heightPerPlayer + heightPerPlayer / 2})`)
-	chartBits.linesGap
+	dom.lines
+		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${h.y(i + 0.5)})`)
+	dom.linesGap
 		.attr('d', playerPathGenerator({ withPositions, skipGaps: false }))
-	chartBits.linesPlaying
+	dom.linesPlaying
 		.attr('d', playerPathGenerator({ withPositions, skipGaps: true }))
 		.attr('stroke', playerColourGenerator)
 }
