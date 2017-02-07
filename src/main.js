@@ -1,7 +1,11 @@
 // Config
 
-var widthPerInnings = 10;
-var heightPerPlayer = 5;
+var dims = {
+	widthPerInnings: 10,
+	heightPerPlayer: 5,
+	padding: 5,
+	axisXHeight: 20,
+};
 var colours = {
 	playerDefault: '#333',
 	captain: 'hsl(120, 50%, 50%)',
@@ -67,7 +71,20 @@ class CounterMap {
 
 function parseData(data) {
 	data.matchesById = mapByField(data.matches);
-	data.innings = data.matches.reduce((memo, match) => memo.concat(match.innings_ids), []);
+	data.inningsIds = data.matches.reduce((memo, match) => memo.concat(match.innings_ids), []);
+
+	// Build a list of the first innings for each year, by index
+	data.yearIndexes = [];
+	let prevYear;
+	data.matches.forEach(match => {
+		let [year] = match.start_date.split('-');
+		if (year !== prevYear) {
+			let inningsId = match.innings_ids[0];
+			let inningsIndex = data.inningsIds.indexOf(inningsId);
+			data.yearIndexes.push({ year, inningsId, inningsIndex });
+		}
+		prevYear = year;
+	});
 
 	// Build a list of blocks of consecutive innings per player, based on total innings index
 	data.players.forEach(player => {
@@ -76,7 +93,7 @@ function parseData(data) {
 		let curBlock = {};
 		player.innings.forEach(inn => {
 			let id = inn.innings_id;
-			let index = data.innings.indexOf(id);
+			let index = data.inningsIds.indexOf(id);
 			inn.total_index = index;
 			if (curBlock.end !== undefined) {
 				// If there's a gap between innings, start a new block
@@ -90,7 +107,7 @@ function parseData(data) {
 				curBlock.start = index;
 				curBlock.idList = [];
 			}
-			curBlock.idList.push(data.innings[index]);
+			curBlock.idList.push(data.inningsIds[index]);
 			curBlock.end = index;
 		});
 		player.inningsBlocks.push(curBlock);
@@ -102,22 +119,37 @@ function parseData(data) {
 }
 
 function setupChart() {
-	totalInningsWidth = widthPerInnings * (allData.innings.length - 1);
+	totalInningsWidth = dims.widthPerInnings * (allData.inningsIds.length - 1);
 
 	helpers.x = d3.scaleLinear()
-		.domain([0, allData.innings.length - 1])
+		.domain([0, allData.inningsIds.length - 1])
 		.range([0, totalInningsWidth]);
 	helpers.y = d3.scaleLinear()
 		.domain([0, 11])
-		.range([0, heightPerPlayer * 11]);
+		.range([0, dims.heightPerPlayer * 11]);
+
+	function setChildren(selection, tagName = 'g', className = 'set-the-class-you-fool', data = [], dataKey) {
+		return selection.selectAll(`.${className}`)
+			.data(data, dataKey)
+			.enter().append(tagName)
+				.attr('class', className);
+	}
 
 	dom.root = d3.select('#shiny').append('svg')
-		.attr('width', totalInningsWidth + widthPerInnings * 2)
-		.attr('height', heightPerPlayer * allData.players.length);
+		.attr('width', totalInningsWidth + dims.padding * 3) // TODO: Make this padding * 2, there's a bug
+		.attr('height', dims.axisXHeight + dims.heightPerPlayer * allData.players.length + dims.padding * 2);
 	dom.defs = dom.root.append('defs');
+	dom.axisX = dom.root.append('g')
+		.attr('class', 'axis axis-x')
+		.attr('transform', `translate(${dims.widthPerInnings}, ${dims.padding})`);
+	dom.axisXTicks = setChildren(dom.axisX, 'g', 'axis-tick', allData.yearIndexes, d => d.year);
+	dom.gridX = dom.root.append('g')
+		.attr('class', 'grid grid-x')
+		.attr('transform', `translate(${dims.widthPerInnings}, ${dims.padding + dims.axisXHeight})`)
+	dom.gridXLines = setChildren(dom.gridX, 'line', 'grid-line', allData.yearIndexes, d => d.year);
 	dom.main = dom.root.append('g')
 		.attr('class', 'graph-main')
-		.attr('transform', `translate(${widthPerInnings}, 0)`);
+		.attr('transform', `translate(${dims.widthPerInnings}, ${dims.padding + dims.axisXHeight})`);
 	dom.lines = dom.main.selectAll('.player-line')
 		.data(allData.players, d => d.info.id)
 		.enter().append('g')
@@ -259,8 +291,6 @@ function playerColourGenerator(player) {
 		return colours.playerDefault;
 	}
 
-	// TODO: Don't generate a gradient if colour is 100% of player's innings
-	console.log(player.info, stops);
 	// Don't bother with a gradient if the player only had one inning
 	if (player.innings.length === 1) {
 		return stops[0].col;
@@ -299,6 +329,21 @@ function playerColourGenerator(player) {
 function renderLines() {
 	// TODO: Switch display modes
 	var withPositions = 1;
+
+	// X axis: Year markers
+	dom.axisXTicks
+		.attr('transform', d => `translate(${h.x(d.inningsIndex)}, ${dims.axisXHeight / 2})`)
+		.append('text')
+			.attr('class', 'axis-tick-year')
+			.attr('dy', '0.35em')
+			.attr('text-anchor', 'middle')
+			.text(d => d.year);
+	dom.gridXLines
+		.attr('transform', d => `translate(${h.x(d.inningsIndex)}, 0)`)
+		.attr('x1', 0).attr('y1', 0)
+		.attr('x2', 0).attr('y2', d => h.y(withPositions ? 20 : allData.players.length))
+
+	// Player lines
 	dom.lines
 		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${h.y(i + 0.5)})`)
 	dom.linesGap
