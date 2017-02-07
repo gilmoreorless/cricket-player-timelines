@@ -2,9 +2,10 @@
 
 var dims = {
 	widthPerInnings: 10,
-	heightPerPlayer: 5,
+	heightPerPlayer: 10,
 	padding: 5,
 	axisXHeight: 20,
+	axisYWidth: 100,
 };
 var colours = {
 	playerDefault: '#333',
@@ -20,7 +21,6 @@ var allData;
 var dom = {};
 var helpers = {};
 var h = helpers; // Shorthand for convenience
-var totalInningsWidth = 0;
 
 
 // Helpers
@@ -119,7 +119,9 @@ function parseData(data) {
 }
 
 function setupChart() {
-	totalInningsWidth = dims.widthPerInnings * (allData.inningsIds.length - 1);
+	var totalInningsWidth = dims.widthPerInnings * (allData.inningsIds.length - 1);
+	var graphStartX = dims.padding + dims.axisYWidth;
+	var graphStartY = dims.padding + dims.axisXHeight;
 
 	helpers.x = d3.scaleLinear()
 		.domain([0, allData.inningsIds.length - 1])
@@ -128,7 +130,16 @@ function setupChart() {
 		.domain([0, 11])
 		.range([0, dims.heightPerPlayer * 11]);
 
-	function setChildren(selection, tagName = 'g', className = 'set-the-class-you-fool', data = [], dataKey) {
+	function append(selection, tagName = 'g', className = '', x = 0, y = 0) {
+		var ret = selection.append(tagName)
+			.attr('class', className);
+		if (x || y) {
+			ret.attr('transform', `translate(${x}, ${y})`);
+		}
+		return ret;
+	}
+
+	function dataChildren(selection, tagName = 'g', className = 'set-the-class-you-fool', data = [], dataKey) {
 		return selection.selectAll(`.${className}`)
 			.data(data, dataKey)
 			.enter().append(tagName)
@@ -136,28 +147,22 @@ function setupChart() {
 	}
 
 	dom.root = d3.select('#shiny').append('svg')
-		.attr('width', totalInningsWidth + dims.padding * 3) // TODO: Make this padding * 2, there's a bug
-		.attr('height', dims.axisXHeight + dims.heightPerPlayer * allData.players.length + dims.padding * 2);
+		.attr('width', graphStartX + totalInningsWidth + dims.padding * 2) // TODO: Make this padding * 1, there's a bug
+		.attr('height', graphStartY + dims.heightPerPlayer * allData.players.length + dims.padding);
 	dom.defs = dom.root.append('defs');
-	dom.axisX = dom.root.append('g')
-		.attr('class', 'axis axis-x')
-		.attr('transform', `translate(${dims.widthPerInnings}, ${dims.padding})`);
-	dom.axisXTicks = setChildren(dom.axisX, 'g', 'axis-tick', allData.yearIndexes, d => d.year);
-	dom.gridX = dom.root.append('g')
-		.attr('class', 'grid grid-x')
-		.attr('transform', `translate(${dims.widthPerInnings}, ${dims.padding + dims.axisXHeight})`)
-	dom.gridXLines = setChildren(dom.gridX, 'line', 'grid-line', allData.yearIndexes, d => d.year);
-	dom.main = dom.root.append('g')
-		.attr('class', 'graph-main')
-		.attr('transform', `translate(${dims.widthPerInnings}, ${dims.padding + dims.axisXHeight})`);
-	dom.lines = dom.main.selectAll('.player-line')
-		.data(allData.players, d => d.info.id)
-		.enter().append('g')
-			.attr('class', 'player-line');
-	dom.linesGap = dom.lines.append('path')
-		.attr('class', 'player-line-gap');
-	dom.linesPlaying = dom.lines.append('path')
-		.attr('class', 'player-line-playing');
+
+	dom.axisX = append(dom.root, 'g', 'axis axis-x', graphStartX, dims.padding);
+	dom.axisXTicks = dataChildren(dom.axisX, 'g', 'axis-tick', allData.yearIndexes, d => d.year);
+	dom.gridX = append(dom.root, 'g', 'grid grid-x', graphStartX, graphStartY);
+	dom.gridXLines = dataChildren(dom.gridX, 'line', 'grid-line', allData.yearIndexes, d => d.year);
+
+	dom.axisY = append(dom.root, 'g', 'axis axis-y', dims.padding, graphStartY);
+	dom.axisYTicks = dataChildren(dom.axisY, 'g', 'axis-tick', allData.players, d => d.info.id);
+
+	dom.main = append(dom.root, 'g', 'graph-main', graphStartX, graphStartY);
+	dom.lines = dataChildren(dom.main, 'g', 'player-line', allData.players, d => d.info.id);
+	dom.linesGap = append(dom.lines, 'path', 'player-line-gap');
+	dom.linesPlaying = append(dom.lines, 'path', 'player-line-playing');
 
 	renderLines();
 }
@@ -341,7 +346,18 @@ function renderLines() {
 	dom.gridXLines
 		.attr('transform', d => `translate(${h.x(d.inningsIndex)}, 0)`)
 		.attr('x1', 0).attr('y1', 0)
-		.attr('x2', 0).attr('y2', d => h.y(withPositions ? 20 : allData.players.length))
+		.attr('x2', 0).attr('y2', d => h.y(withPositions ? 20 : allData.players.length));
+
+	// Y axis: Player names
+	if (!withPositions) {
+		dom.axisYTicks
+			.attr('transform', (d, i) => `translate(0, ${h.y(i + 0.5)})`)
+			.append('text')
+				.attr('class', 'axis-tick-name')
+				.attr('dy', '0.35em')
+				.style('font-size', dims.heightPerPlayer + 'px')
+				.text(d => d.info.name);
+	}
 
 	// Player lines
 	dom.lines

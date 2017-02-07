@@ -2,7 +2,7 @@ Things to do
 ============
 
 * Basic rendering
-	* Name labels (main axis)
+	* Better handling of name labels in row-per-position mode
 	* Colours
 * Options
 	* Toggle layout modes (row-per-player vs row-per-position)
@@ -23,6 +23,8 @@ Things to do
 	* Row-per-position mode:
 		* Ensure player gap lines don't overlap in
 		* Make year marker lines cover all player gap lines
+		* Re-order DOM nodes so all gap lines are below others
+		* Re-order DOM nodes so captain/keeper lines are above others
 	* Row-per-player mode:
 		* Fix position of year/name axis labels so they're always visible after scrolling
 * Nice to have

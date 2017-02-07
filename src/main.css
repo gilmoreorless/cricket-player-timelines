@@ -1,10 +1,14 @@
 body {
 	font-family: 'Source Sans Pro', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
-	font-size: 0.875em;
+	font-size: 0.875rem;
 }
 
 .axis-tick-year {
 	fill: hsl(210, 50%, 70%);
+}
+
+.axis-tick-name {
+	font-size: 0.75rem;
 }
 
 .grid-line {
