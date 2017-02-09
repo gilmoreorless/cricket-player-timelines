@@ -159,10 +159,20 @@ function setupChart() {
 	dom.gridXLines = dataChildren(dom.gridX, 'line', 'grid-line', allData.yearIndexes, d => d.year);
 
 	dom.main = append(dom.root, 'g', 'graph-main', graphStartX, graphStartY);
+	// A 100% width/height rect behind all the graph lines ensures consistent mouse events for a <g> element
+	dom.mouseFallback = append(dom.main, 'rect', 'hover-fallback')
+		.attr('width', totalInningsWidth)
+		.attr('height', '100%');
 	dom.lines = dataChildren(dom.main, 'g', 'player-line', allData.players, d => d.info.id);
 	dom.linesGap = append(dom.lines, 'path', 'player-line-gap');
 	dom.linesPlaying = append(dom.lines, 'path', 'player-line-playing');
 
+	dom.hovers = append(dom.root, 'g', 'graph-hovers', graphStartX, graphStartY);
+	dom.hoverInnings = append(dom.hovers, 'line', 'hover-innings-mark')
+		.attr('y1', '0')
+		.attr('y2', '100%');
+
+	dom.main.on('mousemove', graphHover);
 	renderLines();
 }
 
@@ -199,6 +209,22 @@ function setupControls() {
 	controls.querySelectorAll('input[checked]').forEach(input => {
 		setOptionFromControl(input);
 	});
+}
+
+
+// Interaction
+
+let currentHoverX;
+function graphHover() {
+	const [x, y] = d3.mouse(dom.main.node());
+	let nearestIndex = Math.round(h.x.invert(x));
+	let newX = h.x(nearestIndex);
+	if (newX !== currentHoverX) {
+		dom.hoverInnings
+			.attr('x1', newX)
+			.attr('x2', newX);
+		currentHoverX = newX;
+	}
 }
 
 

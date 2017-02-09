@@ -11,15 +11,17 @@ Things to do
 		* Highlight line, player Name
 		* Tooltip with basic stats?
 	* On graph hover
-		* Show line marker to align innings (as with ODI stats)
+		* Show tooltip with match/innings details
 * Behind the scenes
 	* Include data source in repo
 	* Transpile ES6
 * Optimisations
+	* Transition animations
 	* Ensure year labels don't overlap
 	* Don't generate a gradient if captain/keeper colour is 100% of player's innings
+	* Extract show/hide of gap lines out from renderLines() to avoid needless re-renders
 	* Row-per-position mode:
-		* Ensure player gap lines don't overlap in
+		* Ensure player gap lines don't overlap
 		* Make year marker lines cover all player gap lines
 		* Re-order DOM nodes so all gap lines are below others
 		* Re-order DOM nodes so captain/keeper lines are above others
