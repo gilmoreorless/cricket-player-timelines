@@ -3,6 +3,18 @@ body {
 	font-size: 0.875rem;
 }
 
+.hidden {
+	display: none;
+}
+
+.control label {
+	margin-left: 1em;
+}
+
+#shiny {
+	margin-top: 1em;
+}
+
 .axis-tick-year {
 	fill: hsl(210, 50%, 70%);
 }

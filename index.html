@@ -6,6 +6,13 @@
     <link rel="stylesheet" href="src/main.css">
 </head>
 <body>
+    <div id="controls">
+        <div class="control">
+            <strong>Display mode:</strong>
+            <label><input type="radio" name="display" value="per-player"> One row per player</label>
+            <label><input type="radio" name="display" value="per-position" checked> One row per batting position</label>
+        </div>
+    </div>
     <div id="shiny"></div>
 
     <script src="node_modules/d3/build/d3.js"></script>

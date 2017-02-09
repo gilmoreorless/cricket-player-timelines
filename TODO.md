@@ -5,7 +5,6 @@ Things to do
 	* Better handling of name labels in row-per-position mode
 	* Colours
 * Options
-	* Toggle layout modes (row-per-player vs row-per-position)
 	* Toggle horizontal vs vertical
 	* Toggle showing lines between innings gaps
 * Interaction

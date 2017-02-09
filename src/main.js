@@ -21,6 +21,9 @@ var allData;
 var dom = {};
 var helpers = {};
 var h = helpers; // Shorthand for convenience
+var options = {
+	display: ''
+};
 
 
 // Helpers
@@ -115,6 +118,7 @@ function parseData(data) {
 
 	allData = data;
 	console.log(data);
+	setupControls();
 	setupChart();
 }
 
@@ -152,12 +156,9 @@ function setupChart() {
 	dom.defs = dom.root.append('defs');
 
 	dom.axisX = append(dom.root, 'g', 'axis axis-x', graphStartX, dims.padding);
-	dom.axisXTicks = dataChildren(dom.axisX, 'g', 'axis-tick', allData.yearIndexes, d => d.year);
+	dom.axisY = append(dom.root, 'g', 'axis axis-y', dims.padding, graphStartY);
 	dom.gridX = append(dom.root, 'g', 'grid grid-x', graphStartX, graphStartY);
 	dom.gridXLines = dataChildren(dom.gridX, 'line', 'grid-line', allData.yearIndexes, d => d.year);
-
-	dom.axisY = append(dom.root, 'g', 'axis axis-y', dims.padding, graphStartY);
-	dom.axisYTicks = dataChildren(dom.axisY, 'g', 'axis-tick', allData.players, d => d.info.id);
 
 	dom.main = append(dom.root, 'g', 'graph-main', graphStartX, graphStartY);
 	dom.lines = dataChildren(dom.main, 'g', 'player-line', allData.players, d => d.info.id);
@@ -165,6 +166,31 @@ function setupChart() {
 	dom.linesPlaying = append(dom.lines, 'path', 'player-line-playing');
 
 	renderLines();
+}
+
+
+// Controls
+
+function controlSelected(e) {
+	var input = e.target;
+	if (input.checked) {
+		options[input.name] = input.value;
+		renderLines();
+	}
+}
+
+function setupControls() {
+	var controls = document.getElementById('controls');
+	controls.addEventListener('click', e => {
+		if (e.target.nodeName === 'INPUT') {
+			controlSelected(e);
+		}
+	}, false);
+
+	// Find default values
+	controls.querySelectorAll('input[checked]').forEach(input => {
+		options[input.name] = input.value;
+	});
 }
 
 
@@ -332,41 +358,54 @@ function playerColourGenerator(player) {
 }
 
 function renderLines() {
-	// TODO: Switch display modes
-	var withPositions = 1;
+	const withPositions = options.display === 'per-position';
 
 	// X axis: Year markers
-	dom.axisXTicks
-		.attr('transform', d => `translate(${h.x(d.inningsIndex)}, ${dims.axisXHeight / 2})`)
-		.append('text')
-			.attr('class', 'axis-tick-year')
-			.attr('dy', '0.35em')
-			.attr('text-anchor', 'middle')
-			.text(d => d.year);
+	let axisXTicks = dom.axisX.selectAll('.axis-tick')
+		.data(allData.yearIndexes, d => d.year);
+
+	let newTicks = axisXTicks.enter().append('g')
+		.attr('class', 'axis-tick');
+	newTicks.append('text')
+		.attr('class', 'axis-tick-year')
+		.attr('dy', '0.35em')
+		.attr('text-anchor', 'middle')
+		.text(d => d.year);
+
+	axisXTicks.merge(newTicks)
+		.attr('transform', d => `translate(${h.x(d.inningsIndex)}, ${dims.axisXHeight / 2})`);
+
 	dom.gridXLines
 		.attr('transform', d => `translate(${h.x(d.inningsIndex)}, 0)`)
 		.attr('x1', 0).attr('y1', 0)
 		.attr('x2', 0).attr('y2', d => h.y(withPositions ? 20 : allData.players.length));
 
 	// Y axis: Player names
+	dom.axisY.classed('hidden', withPositions);
 	if (!withPositions) {
-		dom.axisYTicks
-			.attr('transform', (d, i) => `translate(0, ${h.y(i + 0.5)})`)
-			.append('text')
-				.attr('class', 'axis-tick-name')
-				.attr('dy', '0.35em')
-				.style('font-size', dims.heightPerPlayer + 'px')
-				.text(d => d.info.name);
+		let axisYTicks = dom.axisY.selectAll('.axis-tick')
+			.data(allData.players, d => d.info.id);
+
+		let newTicks = axisYTicks.enter().append('g')
+			.attr('class', 'axis-tick');
+		newTicks.append('text')
+			.attr('class', 'axis-tick-name')
+			.attr('dy', '0.35em')
+			.style('font-size', dims.heightPerPlayer + 'px')
+			.text(d => d.info.name);
+
+		axisYTicks.merge(newTicks)
+			.attr('transform', (d, i) => `translate(0, ${h.y(i + 0.5)})`);
 	}
 
 	// Player lines
 	dom.lines
-		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${h.y(i + 0.5)})`)
+		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${h.y(i + 0.5)})`);
 	dom.linesGap
-		.attr('d', playerPathGenerator({ withPositions, skipGaps: false }))
+		.attr('d', playerPathGenerator({ withPositions, skipGaps: false }));
 	dom.linesPlaying
 		.attr('d', playerPathGenerator({ withPositions, skipGaps: true }))
-		.attr('stroke', playerColourGenerator)
+		.attr('stroke', playerColourGenerator);
 }
 
 d3.json('/cricinfo-scripts/project-players-over-time/data/player-data.json', parseData);
