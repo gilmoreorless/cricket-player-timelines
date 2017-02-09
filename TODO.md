@@ -6,7 +6,6 @@ Things to do
 	* Colours
 * Options
 	* Toggle horizontal vs vertical
-	* Toggle showing lines between innings gaps
 * Interaction
 	* On line hover
 		* Highlight line, player Name

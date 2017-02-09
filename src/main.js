@@ -21,9 +21,7 @@ var allData;
 var dom = {};
 var helpers = {};
 var h = helpers; // Shorthand for convenience
-var options = {
-	display: ''
-};
+var options = {};
 
 
 // Helpers
@@ -171,16 +169,26 @@ function setupChart() {
 
 // Controls
 
-function controlSelected(e) {
-	var input = e.target;
-	if (input.checked) {
-		options[input.name] = input.value;
-		renderLines();
+function setOptionFromControl(input) {
+	let value;
+	if (input.type === 'checkbox') {
+		value = input.checked;
+	} else {
+		value = input.value;
+		if (value === 'true') value = true;
+		if (value === 'false') value = false;
 	}
+	options[input.name] = value;
+}
+
+function controlSelected(e) {
+	const input = e.target;
+	setOptionFromControl(input);
+	renderLines();
 }
 
 function setupControls() {
-	var controls = document.getElementById('controls');
+	const controls = document.getElementById('controls');
 	controls.addEventListener('click', e => {
 		if (e.target.nodeName === 'INPUT') {
 			controlSelected(e);
@@ -189,7 +197,7 @@ function setupControls() {
 
 	// Find default values
 	controls.querySelectorAll('input[checked]').forEach(input => {
-		options[input.name] = input.value;
+		setOptionFromControl(input);
 	});
 }
 
@@ -359,6 +367,7 @@ function playerColourGenerator(player) {
 
 function renderLines() {
 	const withPositions = options.display === 'per-position';
+	const withGaps = !!options.gapLines;
 
 	// X axis: Year markers
 	let axisXTicks = dom.axisX.selectAll('.axis-tick')
@@ -401,8 +410,10 @@ function renderLines() {
 	// Player lines
 	dom.lines
 		.attr('transform', (d, i) => withPositions ? '' : `translate(0, ${h.y(i + 0.5)})`);
-	dom.linesGap
-		.attr('d', playerPathGenerator({ withPositions, skipGaps: false }));
+	dom.linesGap.classed('hidden', !withGaps);
+	if (withGaps) {
+		dom.linesGap.attr('d', playerPathGenerator({ withPositions, skipGaps: false }));
+	}
 	dom.linesPlaying
 		.attr('d', playerPathGenerator({ withPositions, skipGaps: true }))
 		.attr('stroke', playerColourGenerator);

@@ -7,8 +7,16 @@ body {
 	display: none;
 }
 
-.control label {
+.control label:not(:first-child) {
 	margin-left: 1em;
+}
+
+.control strong + input[type=checkbox] {
+	margin-left: 0.5em;
+}
+
+.control + .control {
+	margin-top: 0.5em;
 }
 
 #shiny {
